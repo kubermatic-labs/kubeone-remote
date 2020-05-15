@@ -1,0 +1,470 @@
+#!/bin/sh
+
+CFG_KUBEONE_REMOTE_VERSION="0.1.0"
+CFG_KUBEONE_REMOTE_CONFIG="$HOME/.config/kubeone-remote.conf"
+
+# Parse ~/.config/kubeone-remote.conf
+if test -f ${CFG_KUBEONE_REMOTE_CONFIG} ; then . ${CFG_KUBEONE_REMOTE_CONFIG} ; fi ;
+
+# Defaults
+CFG_KUBEONE_REMOTE_CONFIG=${CFG_KUBEONE_REMOTE_CONFIG:-kubeone-remote-run.conf}
+CFG_KUBEONE_REMOTE_GIT_DIR=${CFG_KUBEONE_REMOTE_GIT_DIR:-/tmp}
+
+if [ "$1" = "i-am-really-remote" ] ; then
+    echo "running on $(hostname)"
+
+    # Set PATH
+    export PATH=$HOME/bin:/usr/local/bin:$HOME/.local/bin:$PATH
+
+    # ssh-add -L
+
+    # Clone repos
+    if [ ! -d "${CFG_KUBEONE_REMOTE_GIT_DIR}" ] ; then
+        git clone "${CFG_KUBEONE_REMOTE_GIT_REPO}" "${CFG_KUBEONE_REMOTE_GIT_DIR}"
+    fi
+    if [ ! -z "${CFG_KUBEONE_REMOTE_HELM_GIT_REPO}" ] ; then
+        if [ ! -d "${CFG_KUBEONE_REMOTE_HELM_GIT_DIR}" ] ; then
+            git clone "${CFG_KUBEONE_REMOTE_HELM_GIT_REPO}" "${CFG_KUBEONE_REMOTE_HELM_GIT_DIR}"
+        fi
+    fi
+
+    # Checkout HELM if is git
+    if [ -d "${CFG_KUBEONE_REMOTE_HELM_DIR}" ] ; then
+        cd ${CFG_KUBEONE_REMOTE_HELM_DIR}
+        if git tag > /dev/null 2>&1 && [ $? -eq 0 ]; then
+            git pull
+            git checkout ${CFG_KUBEONE_REMOTE_HELM_BRANCH}
+        else
+            echo "TODO: Checkout from repo or do whatever is required to get repo in place"
+            exit 1
+        fi
+    fi
+
+    # cd ${CFG_KUBEONE_REMOTE_GIT_DIR}
+    cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+
+    # Check if workdir is git
+    if git tag > /dev/null 2>&1 && [ $? -eq 0 ]; then
+        git pull
+        git checkout ${CFG_KUBEONE_REMOTE_BRANCH}
+    else
+        echo "TODO: Checkout from repo or do whatever is required to get repo in place"
+        exit 1
+    fi
+
+    # Pre-Run remote task
+    if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_REMOTE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_REMOTE} ; fi
+
+    for arg in $@
+    do
+        case "$arg" in
+            setup)
+            # Install packages if sudo
+            if [ "${CFG_KUBEONE_REMOTE_HOST_SUDO}" = "yes" ] ; then
+                # sudo apt-get update
+                sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ${CFG_KUBEONE_REMOTE_HOST_PACKAGES}
+            fi
+            echo "Setting up Terraform"
+            VAR_TERRAFORM_VERSION=$(${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} version | awk 'NR==1{print $2}')
+            if [ "${VAR_TERRAFORM_VERSION}" = "v${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}" ] ; then
+                echo "Terrform ${VAR_TERRAFORM_VERSION} in place"
+            else                
+                if test -f ${HOME}/bin/apps/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION} ; then
+                    echo "${HOME}/bin/apps/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}"
+                    wget -O /tmp/terraform_${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}_linux_amd64.zip https://releases.hashicorp.com/terraform/${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}/terraform_${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}_linux_amd64.zip
+                    unzip -o /tmp/terraform_${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}_linux_amd64.zip -d /tmp terraform
+                    rm -v /tmp/terraform_${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}_linux_amd64.zip
+                    mkdir -p ${HOME}/bin/apps/terraform
+                    mv -v /tmp/terraform ${HOME}/bin/apps/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}
+                    chmod +x ${HOME}/bin/apps/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION}
+                fi
+                rm -v ${HOME}/bin/terraform
+                ln -s ${HOME}/bin/apps/terraform/terraform-${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION} ${HOME}/bin/terraform
+                ls -la ${HOME}/bin/terraform
+            fi
+            echo "Setting up KubeOne"
+            VAR_KUBEONE_VERSION=$(${CFG_KUBEONE_REMOTE_KUBEONE_BIN} version | awk -F '"' 'NR==5{print $4}')
+            if [ "${VAR_KUBEONE_VERSION}" = "${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}" ] ; then
+                echo "KubeOne ${VAR_KUBEONE_VERSION} in place"
+            else                
+                if test -f ${HOME}/bin/apps/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION} ; then
+                    echo "${HOME}/bin/apps/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}"
+                    wget -O /tmp/kubeone_${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}_linux_amd64.zip https://github.com/kubermatic/kubeone/releases/download/v${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}/kubeone_${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}_linux_amd64.zip
+                    unzip -o /tmp/kubeone_${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}_linux_amd64.zip -d /tmp kubeone
+                    rm -v /tmp/kubeone_${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}_linux_amd64.zip
+                    mkdir -p ${HOME}/bin/apps/kubeone
+                    mv -v /tmp/kubeone ${HOME}/bin/apps/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}
+                    chmod +x ${HOME}/bin/apps/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION}
+                fi
+                rm -v ${HOME}/bin/kubeone
+                ln -s ${HOME}/bin/apps/kubeone/kubeone-${CFG_KUBEONE_REMOTE_KUBEONE_VERSION} ${HOME}/bin/kubeone
+                ls -la ${HOME}/bin/kubeone
+            fi
+            if test -f ${HOME}/bin/apps/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION} ; then
+                echo "${HOME}/bin/apps/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION} already there"
+            else
+                echo "need to download to ${HOME}/bin/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION}"
+                wget -O /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v${CFG_KUBEONE_REMOTE_KUBECTL_VERSION}/bin/linux/amd64/kubectl
+                mkdir -p ${HOME}/bin/apps/kubectl
+                mv -v /tmp/kubectl ${HOME}/bin/apps/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION}
+                chmod +x ${HOME}/bin/apps/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION}
+            fi
+            rm -v ${HOME}/bin/kubectl
+            ln -s ${HOME}/bin/apps/kubectl/kubectl-${CFG_KUBEONE_REMOTE_KUBECTL_VERSION} ${HOME}/bin/kubectl
+            ls -la ${HOME}/bin/kubectl
+            #
+            # TODO: Add option to compile from git in case of git version
+            #
+            echo "Setting up HELM"
+            VAR_HELM_VERSION=$(${CFG_KUBEONE_REMOTE_HELM_BIN} version | awk -F '"' '{print $2}')
+            if [ "${VAR_HELM_VERSION}" = "v${CFG_KUBEONE_REMOTE_HELM_VERSION}" ] ; then
+                echo "HELM ${VAR_HELM_VERSION} in place"
+            else                
+                if test -f ${HOME}/bin/apps/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION} ; then
+                    echo "${HOME}/bin/apps/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION}"
+                    wget -O /tmp/helm-v${CFG_KUBEONE_REMOTE_HELM_VERSION}-linux-amd64.tar.gz https://get.helm.sh/helm-v${CFG_KUBEONE_REMOTE_HELM_VERSION}-linux-amd64.tar.gz
+                    mkdir -p /tmp/helm
+                    tar xfz /tmp/helm-v${CFG_KUBEONE_REMOTE_HELM_VERSION}-linux-amd64.tar.gz -C /tmp/helm
+                    rm -v /tmp/helm-v${CFG_KUBEONE_REMOTE_HELM_VERSION}-linux-amd64.tar.gz
+                    mkdir -p ${HOME}/bin/apps/helm
+                    mv -v /tmp/helm/linux-amd64/helm ${HOME}/bin/apps/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION}
+                    chmod +x ${HOME}/bin/apps/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION}
+                fi
+                rm -v ${HOME}/bin/helm
+                ln -s ${HOME}/bin/apps/helm/helm-${CFG_KUBEONE_REMOTE_HELM_VERSION} ${HOME}/bin/helm
+                ls -la ${HOME}/bin/helm
+            fi
+            echo "Setting up fluxctl"
+            VAR_FLUXCTL_VERSION=$(${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} version | awk '{print $1}')
+            if [ "${VAR_FLUXCTL_VERSION}" = "${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION}" ] ; then
+                echo "fluxctl ${VAR_FLUXCTL_VERSION} in place"
+            else                
+                if test -f ${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} ; then
+                    echo "${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION}"
+                    wget -O /tmp/fluxctl_linux_amd64 https://github.com/fluxcd/flux/releases/download/${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION}/fluxctl_linux_amd64
+                    mkdir -p ${HOME}/bin/apps/fluxctl
+                    mv -v /tmp/fluxctl_linux_amd64 ${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION}
+                    chmod +x ${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION}
+                fi
+                rm -v ${HOME}/bin/fluxctl
+                ln -s ${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} ${HOME}/bin/fluxctl
+                ls -la ${HOME}/bin/fluxctl
+            fi
+            ;;
+            versions)
+            echo "\nComponent versions:"
+            echo -n "${CFG_KUBEONE_REMOTE_TERRAFORM_BIN}: "
+            VAR_TERRAFORM_VERSION=$(${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} version | awk 'NR==1{print $2}')
+            echo ${VAR_TERRAFORM_VERSION}
+            echo -n "${CFG_KUBEONE_REMOTE_KUBEONE_BIN}: "
+            VAR_KUBEONE_VERSION=$(${CFG_KUBEONE_REMOTE_KUBEONE_BIN} version | awk -F '"' 'NR==5{print $4}')
+            echo ${VAR_KUBEONE_VERSION}
+            echo -n "${CFG_KUBEONE_REMOTE_HELM_BIN}: "
+            VAR_HELM_VERSION=$(${CFG_KUBEONE_REMOTE_HELM_BIN} version | awk -F '"' '{print $2}')
+            echo ${VAR_HELM_VERSION}
+            echo -n "${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}: "
+            VAR_FLUXCTL_VERSION=$(${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} version | awk '{print $1}')
+            echo ${VAR_FLUXCTL_VERSION}
+            echo "\nDownloaded versions:"
+            tree -a ~/bin/apps
+            echo "\nLinked versions:"
+            ls -la ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_KUBEONE_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_KUBECTL_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_HELM_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}
+            ;;
+            hypervisor-instances)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR} ; fi
+            watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HYPERVISOR_LIST} | grep ${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-"
+            ;;
+            tree)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                tree -a
+            fi
+            ;;
+            init)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+            fi
+            ;;
+            plan)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} plan -no-color
+            fi
+            ;;
+            output)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} output kubeone_hosts
+            fi
+            ;;
+            apply)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} plan -no-color
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} apply
+            fi
+            ;;
+            apply-auto-approve)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} plan -no-color
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} apply -auto-approve
+            fi
+            ;;
+            destroy)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} plan -no-color
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} destroy
+            fi
+            ;;
+            destroy-auto-approve)
+            if [ -d ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_TERRAFORM_DIR}
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} init
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} plan -no-color
+                ${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} destroy -auto-approve
+            fi
+            ;;
+            reset)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} reset --manifest config.yaml -v --tfjson terraform --destroy-workers=true
+            fi
+            ;;
+            reset-preserve-workers)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} reset --manifest config.yaml -v --tfjson terraform --destroy-workers=false
+            fi
+            ;;
+            install)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} install --manifest config.yaml -v --tfjson terraform
+            fi
+            ;;
+            upgrade)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} upgrade --upgrade-machine-deployments --manifest config.yaml -v --tfjson terraform
+            fi
+            ;;
+            status)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} status --manifest config.yaml -v --tfjson terraform
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get cs
+            fi
+            ;;
+            setup-storage)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            eval ${CFG_KUBEONE_REMOTE_SETUP_STORAGE}
+            ;;
+            setup-psp)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            eval ${CFG_KUBEONE_REMOTE_SETUP_PSP}
+            ;;
+            setup-helm)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            eval ${CFG_KUBEONE_REMOTE_SETUP_HELM}
+            ;;
+            version)
+            ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} version
+            ;;
+            kubectl)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            shift
+            shift
+            ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} $@
+            ;;
+            kubectl-version)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} version
+            ;;
+            get-nodes)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get nodes -o wide"
+            fi
+            ;;
+            get-pods)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pods -A -o wide"
+            fi
+            ;;
+            get-deployments)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get deployments -A -o wide"
+            fi
+            ;;
+            get-psp)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get psp -A
+            fi
+            ;;
+            get-md)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get machinedeployments -n kube-system
+            fi
+            ;;
+            get-storageclass)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get storageclass -A
+            fi
+            ;;
+            get-pv)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pv -A"
+            fi
+            ;;
+            get-pvc)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pvc -A"
+            fi
+            ;;
+            helm-list)
+            if [ -d ${CFG_KUBEONE_REMOTE_HELM_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HELM_BIN} list -A"
+            fi
+            ;;
+            flux-identity)
+            if [ -d ${CFG_KUBEONE_REMOTE_HELM_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} --k8s-fwd-ns=gitops-system identity
+            fi
+            ;;
+            flux-sync)
+            if [ -d ${CFG_KUBEONE_REMOTE_HELM_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} --k8s-fwd-ns=gitops-system sync
+            fi
+            ;;
+        esac
+    done
+else
+    if [ "$1" = "setup" ] || [ "$1" = "versions" ] || [ "$1" = "tree" ] || [ "$1" = "init" ] || \
+       [ "$1" = "hypervisor-instances" ] || [ "$1" = "plan" ] || [ "$1" = "output" ] || \
+       [ "$1" = "apply" ] || [ "$1" = "apply-auto-approve" ] || [ "$1" = "destroy" ] || \
+       [ "$1" = "destroy-auto-approve" ] || [ "$1" = "reset" ] || [ "$1" = "reset-preserve-workers" ] || \
+       [ "$1" = "install" ] || [ "$1" = "upgrade" ] || [ "$1" = "status" ] || [ "$1" = "setup-storage" ] || \
+       [ "$1" = "setup-psp" ] || [ "$1" = "setup-helm" ] || [ "$1" = "version" ] || [ "$1" = "kubectl" ] || [ "$1" = "kubectl-version" ] || [ "$1" = "get-nodes" ] || \
+       [ "$1" = "get-pods" ] || [ "$1" = "get-deployments" ] || [ "$1" = "get-psp" ] || [ "$1" = "get-md" ] || [ "$1" = "get-storageclass" ] || \
+       [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] ; then
+        # Parse local kubeone-remote.conf
+        if test -f ${CFG_KUBEONE_REMOTE_CONFIG} ; then . ${PWD}/${CFG_KUBEONE_REMOTE_CONFIG} ; fi
+
+        # Defaults
+        CFG_KUBEONE_REMOTE_GIT=${CFG_KUBEONE_REMOTE_GIT:-$(git config --get remote.origin.url)}
+        CFG_KUBEONE_REMOTE_BRANCH=${CFG_KUBEONE_REMOTE_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
+        CFG_KUBEONE_REMOTE_HELM_BRANCH=${CFG_KUBEONE_REMOTE_HELM_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
+        CFG_KUBEONE_REMOTE_SSH_HOST_USER=${CFG_KUBEONE_REMOTE_SSH_HOST_USER:-ubuntu}
+        CFG_KUBEONE_REMOTE_SSH_BASTION_USER=${CFG_KUBEONE_REMOTE_SSH_BASTION_USER:-ubuntu}
+        CFG_KUBEONE_REMOTE_HOST_SUDO=${CFG_KUBEONE_REMOTE_HOST_SUDO:-yes}
+        CFG_KUBEONE_REMOTE_HOST_PACKAGES=${CFG_KUBEONE_REMOTE_HOST_PACKAGES:-"git tig clustershell tree wget curl unzip"}
+
+        # Pre-Run local task
+        if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_LOCAL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_LOCAL} ; fi
+
+        # Copy over kubeone-remote
+        scp -o ControlPersist=false -J ${CFG_KUBEONE_REMOTE_SSH_BASTION_USER}@${CFG_KUBEONE_REMOTE_SSH_BASTION} \
+        $(which kubeone-remote) ${CFG_KUBEONE_REMOTE_SSH_HOST_USER}@${CFG_KUBEONE_REMOTE_SSH_HOST}:/tmp
+
+        ssh -t -J ${CFG_KUBEONE_REMOTE_SSH_BASTION_USER}@${CFG_KUBEONE_REMOTE_SSH_BASTION} \
+            ${CFG_KUBEONE_REMOTE_SSH_HOST_USER}@${CFG_KUBEONE_REMOTE_SSH_HOST} \
+            "
+            tmux new-session -s \"kubeone-remote\" \"\
+            CFG_KUBEONE_REMOTE_CLUSTER_NAME=${CFG_KUBEONE_REMOTE_CLUSTER_NAME} \
+            CFG_KUBEONE_REMOTE_TERRAFORM_VERSION=${CFG_KUBEONE_REMOTE_TERRAFORM_VERSION} \
+            CFG_KUBEONE_REMOTE_TERRAFORM_BIN=${CFG_KUBEONE_REMOTE_TERRAFORM_BIN} \
+            CFG_KUBEONE_REMOTE_KUBEONE_VERSION=${CFG_KUBEONE_REMOTE_KUBEONE_VERSION} \
+            CFG_KUBEONE_REMOTE_KUBEONE_BIN=${CFG_KUBEONE_REMOTE_KUBEONE_BIN} \
+            CFG_KUBEONE_REMOTE_KUBECTL_VERSION=${CFG_KUBEONE_REMOTE_KUBECTL_VERSION} \
+            CFG_KUBEONE_REMOTE_KUBECTL_BIN=${CFG_KUBEONE_REMOTE_KUBECTL_BIN} \
+            CFG_KUBEONE_REMOTE_HELM_VERSION=${CFG_KUBEONE_REMOTE_HELM_VERSION} \
+            CFG_KUBEONE_REMOTE_HELM_BIN=${CFG_KUBEONE_REMOTE_HELM_BIN} \
+            CFG_KUBEONE_REMOTE_FLUXCTL_VERSION=${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} \
+            CFG_KUBEONE_REMOTE_FLUXCTL_BIN=${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} \
+            CFG_KUBEONE_REMOTE_PRERUN_REMOTE='${CFG_KUBEONE_REMOTE_PRERUN_REMOTE}' \
+            CFG_KUBEONE_REMOTE_PRERUN_KUBEONE='${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}' \
+            CFG_KUBEONE_REMOTE_PRERUN_KUBECTL='${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}' \
+            CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR='${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR}' \
+            CFG_KUBEONE_REMOTE_HOST_SUDO=${CFG_KUBEONE_REMOTE_HOST_SUDO} \
+            CFG_KUBEONE_REMOTE_HOST_PACKAGES='${CFG_KUBEONE_REMOTE_HOST_PACKAGES}' \
+            CFG_KUBEONE_REMOTE_GIT_REPO=${CFG_KUBEONE_REMOTE_GIT_REPO} \
+            CFG_KUBEONE_REMOTE_GIT_DIR=${CFG_KUBEONE_REMOTE_GIT_DIR} \
+            CFG_KUBEONE_REMOTE_BRANCH=${CFG_KUBEONE_REMOTE_BRANCH} \
+            CFG_KUBEONE_REMOTE_HELM_GIT_REPO=${CFG_KUBEONE_REMOTE_HELM_GIT_REPO} \
+            CFG_KUBEONE_REMOTE_HELM_GIT_DIR=${CFG_KUBEONE_REMOTE_HELM_GIT_DIR} \
+            CFG_KUBEONE_REMOTE_HELM_BRANCH=${CFG_KUBEONE_REMOTE_HELM_BRANCH} \
+            CFG_KUBEONE_REMOTE_TERRAFORM_DIR=${CFG_KUBEONE_REMOTE_TERRAFORM_DIR} \
+            CFG_KUBEONE_REMOTE_KUBEONE_DIR=${CFG_KUBEONE_REMOTE_KUBEONE_DIR} \
+            CFG_KUBEONE_REMOTE_HELM_DIR=${CFG_KUBEONE_REMOTE_HELM_DIR} \
+            CFG_KUBEONE_REMOTE_HYPERVISOR_LIST='${CFG_KUBEONE_REMOTE_HYPERVISOR_LIST}' \
+            CFG_KUBEONE_REMOTE_SETUP_STORAGE='${CFG_KUBEONE_REMOTE_SETUP_STORAGE}' \
+            CFG_KUBEONE_REMOTE_SETUP_PSP='${CFG_KUBEONE_REMOTE_SETUP_PSP}' \
+            CFG_KUBEONE_REMOTE_SETUP_HELM='${CFG_KUBEONE_REMOTE_SETUP_HELM}' \
+            /tmp/kubeone-remote i-am-really-remote $@ ; \
+            read\
+            \""
+    else
+        echo "kubeone-remote ${CFG_KUBEONE_REMOTE_VERSION}"
+    fi
+fi
+
+#########################
+# TODO
+#
+# Add support for:
+#
+#   - Untaint: kubeone-remote kubectl taint nodes --all node-role.kubernetes.io/master-
+#   - kubeone-remote kubectl get csidrivers.storage.k8s.io
+#   - kubeone-remote kubectl -nkube-system describe pod csi-cinder-controllerplugin-0
