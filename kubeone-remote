@@ -34,6 +34,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
         if git tag > /dev/null 2>&1 && [ $? -eq 0 ]; then
             git pull
             git checkout ${CFG_KUBEONE_REMOTE_HELM_BRANCH}
+            echo "Checked out new code in ${CFG_KUBEONE_REMOTE_HELM_DIR}"
         else
             echo "TODO: Checkout from repo or do whatever is required to get repo in place"
             exit 1
@@ -47,6 +48,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
     if git tag > /dev/null 2>&1 && [ $? -eq 0 ]; then
         git pull
         git checkout ${CFG_KUBEONE_REMOTE_BRANCH}
+        echo "Checked out new code in ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}"
     else
         echo "TODO: Checkout from repo or do whatever is required to get repo in place"
         exit 1
@@ -158,6 +160,24 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 ln -s ${HOME}/bin/apps/fluxctl/fluxctl-${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} ${HOME}/bin/fluxctl
                 ls -la ${HOME}/bin/fluxctl
             fi
+            echo "Setting up kubeseal"
+            VAR_KUBESEAL_VERSION=$(${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} --version | awk '{print $3}')
+            if [ "${VAR_KUBESEAL_VERSION}" = "${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION}" ] ; then
+                echo "kubeseal ${VAR_KUBESEAL_VERSION} in place"
+            else                
+                if test -f ${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} ; then
+                    echo "${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION}"
+                    wget -O /tmp/kubeseal_linux_amd64 https://github.com/bitnami-labs/sealed-secrets/releases/download/v${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION}/kubeseal-linux-amd64
+                    mkdir -p ${HOME}/bin/apps/kubeseal
+                    mv -v /tmp/kubeseal_linux_amd64 ${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION}
+                    chmod +x ${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION}
+                fi
+                rm -v ${HOME}/bin/kubeseal
+                ln -s ${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} ${HOME}/bin/kubeseal
+                ls -la ${HOME}/bin/kubeseal
+            fi
             ;;
             versions)
             echo "\nComponent versions:"
@@ -173,6 +193,9 @@ if [ "$1" = "i-am-really-remote" ] ; then
             echo -n "${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}: "
             VAR_FLUXCTL_VERSION=$(${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} version | awk '{print $1}')
             echo ${VAR_FLUXCTL_VERSION}
+            echo -n "${CFG_KUBEONE_REMOTE_KUBESEAL_BIN}: "
+            VAR_KUBESEAL_VERSION=$(${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} --version | awk '{print $3}')
+            echo ${VAR_KUBESEAL_VERSION}
             echo "\nDownloaded versions:"
             tree -a ~/bin/apps
             echo "\nLinked versions:"
@@ -181,10 +204,11 @@ if [ "$1" = "i-am-really-remote" ] ; then
             ls -la ${CFG_KUBEONE_REMOTE_KUBECTL_BIN}
             ls -la ${CFG_KUBEONE_REMOTE_HELM_BIN}
             ls -la ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_KUBESEAL_BIN}
             ;;
             hypervisor-instances)
             if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR} ; fi
-            watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HYPERVISOR_LIST} | grep ${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-"
+            watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HYPERVISOR_LIST} | grep ${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-"
             ;;
             tree)
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
@@ -315,21 +339,35 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get nodes -o wide"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get nodes -o wide"
             fi
             ;;
             get-pods)
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pods -A -o wide"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pods -A -o wide"
+            fi
+            ;;
+            get-svc)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get svc -A -o wide"
             fi
             ;;
             get-deployments)
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get deployments -A -o wide"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get deployments -A -o wide"
+            fi
+            ;;
+            get-events)
+            if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
+                if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+                export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get events -A | tail -n 20"
             fi
             ;;
             get-psp)
@@ -357,21 +395,21 @@ if [ "$1" = "i-am-really-remote" ] ; then
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pv -A"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pv -A"
             fi
             ;;
             get-pvc)
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pvc -A"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_KUBECTL_BIN} get pvc -A"
             fi
             ;;
             helm-list)
             if [ -d ${CFG_KUBEONE_REMOTE_HELM_DIR} ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
-                watch "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HELM_BIN} list -A"
+                watch -t "echo \"This is in watch, exit with CTRL+C\n\" ; ${CFG_KUBEONE_REMOTE_HELM_BIN} list -A"
             fi
             ;;
             flux-identity)
@@ -379,6 +417,8 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
                 ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} --k8s-fwd-ns=gitops-system identity
+                # kubeone-remote kubectl -n gitops-system logs deployment/flux-gitops-system 
+
             fi
             ;;
             flux-sync)
@@ -397,7 +437,7 @@ else
        [ "$1" = "destroy-auto-approve" ] || [ "$1" = "reset" ] || [ "$1" = "reset-preserve-workers" ] || \
        [ "$1" = "install" ] || [ "$1" = "upgrade" ] || [ "$1" = "status" ] || [ "$1" = "setup-storage" ] || \
        [ "$1" = "setup-psp" ] || [ "$1" = "setup-helm" ] || [ "$1" = "version" ] || [ "$1" = "kubectl" ] || [ "$1" = "kubectl-version" ] || [ "$1" = "get-nodes" ] || \
-       [ "$1" = "get-pods" ] || [ "$1" = "get-deployments" ] || [ "$1" = "get-psp" ] || [ "$1" = "get-md" ] || [ "$1" = "get-storageclass" ] || \
+       [ "$1" = "get-pods" ] || [ "$1" = "get-svc" ] || [ "$1" = "get-deployments" ] || [ "$1" = "get-events" ] || [ "$1" = "get-psp" ] || [ "$1" = "get-md" ] || [ "$1" = "get-storageclass" ] || \
        [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] ; then
         # Parse local kubeone-remote.conf
         if test -f ${CFG_KUBEONE_REMOTE_CONFIG} ; then . ${PWD}/${CFG_KUBEONE_REMOTE_CONFIG} ; fi
@@ -433,6 +473,8 @@ else
             CFG_KUBEONE_REMOTE_HELM_BIN=${CFG_KUBEONE_REMOTE_HELM_BIN} \
             CFG_KUBEONE_REMOTE_FLUXCTL_VERSION=${CFG_KUBEONE_REMOTE_FLUXCTL_VERSION} \
             CFG_KUBEONE_REMOTE_FLUXCTL_BIN=${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} \
+            CFG_KUBEONE_REMOTE_KUBESEAL_VERSION=${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} \
+            CFG_KUBEONE_REMOTE_KUBESEAL_BIN=${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} \
             CFG_KUBEONE_REMOTE_PRERUN_REMOTE='${CFG_KUBEONE_REMOTE_PRERUN_REMOTE}' \
             CFG_KUBEONE_REMOTE_PRERUN_KUBEONE='${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}' \
             CFG_KUBEONE_REMOTE_PRERUN_KUBECTL='${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}' \
