@@ -428,6 +428,12 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} --k8s-fwd-ns=gitops-system sync
             fi
             ;;
+            kubeseal)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            shift
+            shift
+            ${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} $@
         esac
     done
 else
@@ -438,7 +444,7 @@ else
        [ "$1" = "install" ] || [ "$1" = "upgrade" ] || [ "$1" = "status" ] || [ "$1" = "setup-storage" ] || \
        [ "$1" = "setup-psp" ] || [ "$1" = "setup-helm" ] || [ "$1" = "version" ] || [ "$1" = "kubectl" ] || [ "$1" = "kubectl-version" ] || [ "$1" = "get-nodes" ] || \
        [ "$1" = "get-pods" ] || [ "$1" = "get-svc" ] || [ "$1" = "get-deployments" ] || [ "$1" = "get-events" ] || [ "$1" = "get-psp" ] || [ "$1" = "get-md" ] || [ "$1" = "get-storageclass" ] || \
-       [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] ; then
+       [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] || [ "$1" = "kubeseal" ] ; then
         # Parse local kubeone-remote.conf
         if test -f ${CFG_KUBEONE_REMOTE_CONFIG} ; then . ${PWD}/${CFG_KUBEONE_REMOTE_CONFIG} ; fi
 
