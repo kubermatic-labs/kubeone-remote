@@ -178,6 +178,27 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 ln -s ${HOME}/bin/apps/kubeseal/kubeseal-${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} ${HOME}/bin/kubeseal
                 ls -la ${HOME}/bin/kubeseal
             fi
+            echo "Setting up VELERO"
+            VAR_VELERO_VERSION=$(ls -la ${HOME}/bin/velero | awk -F '-' '{print $3}')
+            if [ "${VAR_VELERO_VERSION}" = "v${CFG_KUBEONE_REMOTE_VELERO_VERSION}" ] ; then
+                echo "VELERO ${VAR_VELERO_VERSION} in place"
+            else
+                if test -f ${HOME}/bin/apps/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION} ; then
+                    echo "${HOME}/bin/apps/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION} already there"
+                else
+                    echo "need to download to ${HOME}/bin/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION}"
+                    wget -O /tmp/velero-v${CFG_KUBEONE_REMOTE_VELERO_VERSION}-linux-amd64.tar.gz https://github.com/vmware-tanzu/velero/releases/download/v${CFG_KUBEONE_REMOTE_VELERO_VERSION}/velero-v${CFG_KUBEONE_REMOTE_VELERO_VERSION}-linux-amd64.tar.gz
+                    mkdir -p /tmp/velero
+                    tar xfz /tmp/velero-v${CFG_KUBEONE_REMOTE_VELERO_VERSION}-linux-amd64.tar.gz -C /tmp/velero
+                    rm -v /tmp/velero-v${CFG_KUBEONE_REMOTE_VELERO_VERSION}-linux-amd64.tar.gz
+                    mkdir -p ${HOME}/bin/apps/velero
+                    mv -v /tmp/velero/velero-v${CFG_KUBEONE_REMOTE_VELERO_VERSION}-linux-amd64/velero ${HOME}/bin/apps/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION}
+                    chmod +x ${HOME}/bin/apps/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION}
+                fi
+                rm -v ${HOME}/bin/velero
+                ln -s ${HOME}/bin/apps/velero/velero-${CFG_KUBEONE_REMOTE_VELERO_VERSION} ${HOME}/bin/velero
+                ls -la ${HOME}/bin/velero
+            fi
             ;;
             versions)
             echo "\nComponent versions:"
@@ -187,7 +208,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
             echo -n "${CFG_KUBEONE_REMOTE_KUBEONE_BIN}: "
             VAR_KUBEONE_VERSION=$(${CFG_KUBEONE_REMOTE_KUBEONE_BIN} version | awk -F '"' 'NR==5{print $4}')
             echo ${VAR_KUBEONE_VERSION}
-            echo -n "${CFG_KUBEONE_REMOTE_HELM_BIN}: "
+            echo -n "${CFG_KUBEONE_REMOTE_HELM_BIN}: "2
             VAR_HELM_VERSION=$(${CFG_KUBEONE_REMOTE_HELM_BIN} version | awk -F '"' '{print $2}')
             echo ${VAR_HELM_VERSION}
             echo -n "${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}: "
@@ -196,6 +217,9 @@ if [ "$1" = "i-am-really-remote" ] ; then
             echo -n "${CFG_KUBEONE_REMOTE_KUBESEAL_BIN}: "
             VAR_KUBESEAL_VERSION=$(${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} --version | awk '{print $3}')
             echo ${VAR_KUBESEAL_VERSION}
+            echo -n "${CFG_KUBEONE_REMOTE_VELERO_BIN}: "
+            VAR_VELERO_VERSION=$(ls -la ${HOME}/bin/velero | awk -F '-' '{print $3}')
+            echo ${VAR_VELERO_VERSION}
             echo "\nDownloaded versions:"
             tree -a ~/bin/apps
             echo "\nLinked versions:"
@@ -205,6 +229,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
             ls -la ${CFG_KUBEONE_REMOTE_HELM_BIN}
             ls -la ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN}
             ls -la ${CFG_KUBEONE_REMOTE_KUBESEAL_BIN}
+            ls -la ${CFG_KUBEONE_REMOTE_VELERO_BIN}
             ;;
             hypervisor-instances)
             if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_HYPERVISOR} ; fi
@@ -292,7 +317,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
             if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
-                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} upgrade --upgrade-machine-deployments --manifest config.yaml -v --tfjson terraform
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} upgrade --force --upgrade-machine-deployments --manifest config.yaml -v --tfjson terraform
             fi
             ;;
             status)
@@ -418,7 +443,6 @@ if [ "$1" = "i-am-really-remote" ] ; then
                 export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
                 ${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} --k8s-fwd-ns=gitops-system identity
                 # kubeone-remote kubectl -n gitops-system logs deployment/flux-gitops-system 
-
             fi
             ;;
             flux-sync)
@@ -434,6 +458,13 @@ if [ "$1" = "i-am-really-remote" ] ; then
             shift
             shift
             ${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} $@
+            ;;
+            velero)
+            if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL} ; fi
+            export KUBECONFIG=${CFG_KUBEONE_REMOTE_KUBEONE_DIR}/${CFG_KUBEONE_REMOTE_CLUSTER_NAME}-kubeconfig
+            shift
+            shift
+            ${CFG_KUBEONE_REMOTE_VELERO_BIN} $@
         esac
     done
 else
@@ -444,7 +475,7 @@ else
        [ "$1" = "install" ] || [ "$1" = "upgrade" ] || [ "$1" = "status" ] || [ "$1" = "setup-storage" ] || \
        [ "$1" = "setup-psp" ] || [ "$1" = "setup-helm" ] || [ "$1" = "version" ] || [ "$1" = "kubectl" ] || [ "$1" = "kubectl-version" ] || [ "$1" = "get-nodes" ] || \
        [ "$1" = "get-pods" ] || [ "$1" = "get-svc" ] || [ "$1" = "get-deployments" ] || [ "$1" = "get-events" ] || [ "$1" = "get-psp" ] || [ "$1" = "get-md" ] || [ "$1" = "get-storageclass" ] || \
-       [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] || [ "$1" = "kubeseal" ] ; then
+       [ "$1" = "get-pvc" ] || [ "$1" = "get-pv" ] || [ "$1" = "helm-list" ] || [ "$1" = "flux-identity" ] || [ "$1" = "flux-sync" ] || [ "$1" = "kubeseal" ] || [ "$1" = "velero" ] ; then
         # Parse local kubeone-remote.conf
         if test -f ${CFG_KUBEONE_REMOTE_CONFIG} ; then . ${PWD}/${CFG_KUBEONE_REMOTE_CONFIG} ; fi
 
@@ -481,6 +512,8 @@ else
             CFG_KUBEONE_REMOTE_FLUXCTL_BIN=${CFG_KUBEONE_REMOTE_FLUXCTL_BIN} \
             CFG_KUBEONE_REMOTE_KUBESEAL_VERSION=${CFG_KUBEONE_REMOTE_KUBESEAL_VERSION} \
             CFG_KUBEONE_REMOTE_KUBESEAL_BIN=${CFG_KUBEONE_REMOTE_KUBESEAL_BIN} \
+            CFG_KUBEONE_REMOTE_VELERO_VERSION=${CFG_KUBEONE_REMOTE_VELERO_VERSION} \
+            CFG_KUBEONE_REMOTE_VELERO_BIN=${CFG_KUBEONE_REMOTE_VELERO_BIN} \
             CFG_KUBEONE_REMOTE_PRERUN_REMOTE='${CFG_KUBEONE_REMOTE_PRERUN_REMOTE}' \
             CFG_KUBEONE_REMOTE_PRERUN_KUBEONE='${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}' \
             CFG_KUBEONE_REMOTE_PRERUN_KUBECTL='${CFG_KUBEONE_REMOTE_PRERUN_KUBECTL}' \
