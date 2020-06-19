@@ -317,7 +317,7 @@ if [ "$1" = "i-am-really-remote" ] ; then
             if [ ! -z "${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE}" ] ; then eval ${CFG_KUBEONE_REMOTE_PRERUN_KUBEONE} ; fi
             if [ -d ${CFG_KUBEONE_REMOTE_KUBEONE_DIR} ] ; then
                 cd ${CFG_KUBEONE_REMOTE_KUBEONE_DIR}
-                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} upgrade --upgrade-machine-deployments --manifest config.yaml -v --tfjson terraform
+                ${CFG_KUBEONE_REMOTE_KUBEONE_BIN} upgrade --force --upgrade-machine-deployments --manifest config.yaml -v --tfjson terraform
             fi
             ;;
             status)
