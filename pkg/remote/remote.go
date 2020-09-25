@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/kubermatic-labs/kubeone-remote/pkg/config"
+	"github.com/kubermatic-labs/kubeone-remote/pkg/remote/execute"
 	"github.com/kubermatic-labs/kubeone-remote/pkg/remote/setup"
 )
 
@@ -38,6 +39,19 @@ func Setup(cfg config.Config) error {
 	err = setup.PreRunRemoteTasks(cfg)
 	if err != nil {
 		return fmt.Errorf("setup failed pre-running remote tasks: %v", err)
+	}
+	return nil
+}
+
+// Execute performs the command on the remote node.
+func Execute(cfg config.Config) error {
+	executer, err := execute.Switch(cfg)
+	if err != nil {
+		return fmt.Errorf("cannot determine command executer: %v", err)
+	}
+	err = executer.Do(cfg)
+	if err != nil {
+		return fmt.Errorf("executing command %q failed: $v", cfg.Command, err)
 	}
 	return nil
 }

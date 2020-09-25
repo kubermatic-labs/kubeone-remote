@@ -29,7 +29,8 @@ type Flag struct {
 
 // Config contains all needed parameters.
 type Config struct {
-	Flags []Flag
+	Command string
+	Flags   []Flag
 }
 
 // Read retrieves data from an io.Reader and unmarshals it into the
