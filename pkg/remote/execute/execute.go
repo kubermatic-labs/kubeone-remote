@@ -26,12 +26,28 @@ import (
 // commands based on the addressed tool (kubeone-emote, kubeone, helm,
 // kubectl, ...).
 type Executer interface {
+	// Init prepares the Executer for its work.
+	Init(cfg config.Config) Executer
+
+	// HandlesCommand checks if the Executer can handle the given command.
+	HandlesCommand() bool
+
 	// Do executes the command.
-	Do(cfg config.Config) error
+	Do() error
 }
 
 // Switch determines which Executer implementation later is responsible
 // for the command execution.
 func Switch(cfg config.Config) (Executer, error) {
-	return nil, fmt.Errorf("not yet implemented")
+	kubeOneRemoteExec := NewKubeOneRemoteExecuter().Init(cfg)
+	kubeOneExec := NewKubeOneExecuter().Init(cfg)
+
+	switch {
+	case kubeOneRemoteExec.HandlesCommand():
+		return kubeOneRemoteExec, nil
+	case kubeOneExec.HandlesCommand():
+		return kubeOneExec, nil
+	default:
+		return nil, fmt.Errorf("not yet implemented")
+	}
 }
