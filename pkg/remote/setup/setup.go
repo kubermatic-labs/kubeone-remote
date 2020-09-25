@@ -12,24 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package local
+// Package setup provides the functionality to setup KubeOne Remote and
+// all needed tools on remote side.
+package setup
 
 import (
 	"github.com/kubermatic-labs/kubeone-remote/pkg/config"
 )
 
-// IsValidCommand checks if the given command is a valid one.
-func IsValidCommand(cmd string) bool {
-	return false
-}
-
-// PreRunLocalTasks performs initial configured tasks.
-func PreRunLocalTasks(cfg config.Config) error {
+// InstallKubeOneRemote sets up KubeOne Remote on the remote node.
+func InstallKubeOneRemote(cfg config.Config) error {
 	return nil
 }
 
-// InstallKubeOneRemote installs a KubeOne Remote copy on the controller
-// node for remote execution.
-func InstallKubeOneRemote(cfg config.Config) error {
+// CheckoutBranches cares for the ceckout of the possible needed branches
+// for Helm and KubeOne Remote.
+func CheckoutBranches(cfg config.Config) error {
+	return nil
+}
+
+// PreRunRemoteTasks performs initial configured tasks.
+func PreRunRemoteTasks(cfg config.Config) error {
 	return nil
 }

@@ -16,3 +16,28 @@
 // node to execute the different commands for KubeOne and the other
 // tools.
 package remote
+
+import (
+	"fmt"
+
+	"github.com/kubermatic-labs/kubeone-remote/pkg/config"
+	"github.com/kubermatic-labs/kubeone-remote/pkg/remote/setup"
+)
+
+// Setup performs all needed steps for installation and configuration
+// on the remote node.
+func Setup(cfg config.Config) error {
+	err := setup.InstallKubeOneRemote(cfg)
+	if err != nil {
+		return fmt.Errorf("setup failed installing KubeOne Remote: %v", err)
+	}
+	err = setup.CheckoutBranches(cfg)
+	if err != nil {
+		return fmt.Errorf("setup failed checking out needed branches: %v", err)
+	}
+	err = setup.PreRunRemoteTasks(cfg)
+	if err != nil {
+		return fmt.Errorf("setup failed pre-running remote tasks: %v", err)
+	}
+	return nil
+}
